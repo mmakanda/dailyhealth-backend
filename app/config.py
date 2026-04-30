@@ -11,7 +11,7 @@ class Settings(BaseSettings):
 
     # Groq AI — get free key at https://console.groq.com
     groq_api_key: str = ""
-    groq_model: str = "llama3-8b-8192"
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # CORS — set to your Vercel frontend URL in production
     frontend_url: str = "http://localhost:3000"
@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra ="ignore"
 
 
 @lru_cache()
