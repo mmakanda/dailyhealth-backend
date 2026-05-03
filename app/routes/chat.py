@@ -23,7 +23,7 @@ def build_product_context(products: list) -> str:
 
     lines = []
     for p in products:
-        stock_status = f"{p.stock} in stock" if p.stock > 0 else "OUT OF STOCK"
+        stock_status = "IN STOCK" if p.stock > 0 else "OUT OF STOCK"
         lines.append(
             f"- {p.name} | Price: ${p.price:.2f} | {stock_status} | Info: {p.description}"
         )
