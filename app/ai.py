@@ -30,7 +30,7 @@ YOUR CORE RULES — follow these strictly:
 3. If someone describes serious, severe, or emergency symptoms, ALWAYS say: "Please see a doctor or visit a clinic immediately." and offer to connect them to our pharmacist.
 4. ONLY recommend products that appear as IN STOCK in the [CURRENT INVENTORY] section. Never recommend OUT OF STOCK items.
 5. NEVER mention stock quantities or numbers (e.g. never say "200 in stock" or "we have 50 units"). Only say "in stock" or "out of stock".
-6. If a product is NOT in the inventory list say: "We don't currently stock that — please call us on +263 77 XXX XXXX to check or request it."
+6. If a product is NOT in the inventory list say: "We don't currently stock that — please call us on +263 78 617 6284 to check or request it."
 7. Keep responses warm, natural and concise — 2–4 sentences max. Do not use bullet points unless listing multiple products.
 8. If the user writes in Shona or Ndebele, respond in that language, keeping medical terms in English.
 9. If the user replies with just "yes" or "ok" after a recommendation, ask: "Great! Would you like to order via WhatsApp? Just send us a message and we will assist you."
@@ -102,10 +102,10 @@ async def generate_response(user_message: str, product_context: str = "") -> str
         return await _call_groq(messages)
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 401:
-            return "I'm having a configuration issue right now. Please call the pharmacy directly on +263 77 XXX XXXX."
+            return "I'm having a configuration issue right now. Please call the pharmacy directly on +263 78 617 6284."
         return "Sorry, I'm temporarily unavailable. Please call us directly or try again in a moment."
     except Exception:
-        return "Sorry, I'm having trouble right now. Please call the pharmacy directly on +263 77 XXX XXXX."
+        return "Sorry, I'm having trouble right now. Please call the pharmacy directly on +263 78 617 6284."
 
 
 async def extract_order_from_message(user_message: str, product_list: str) -> dict:
