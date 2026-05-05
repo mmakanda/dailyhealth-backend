@@ -8,8 +8,15 @@ from app.ai import generate_response, extract_order_from_message
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+from typing import List, Optional
+
+class HistoryItem(BaseModel):
+    role: str
+    content: str
+
 class ChatMessage(BaseModel):
     message: str
+    history: Optional[List[HistoryItem]] = []
 
 
 def build_product_context(products: list) -> str:
@@ -37,7 +44,8 @@ async def chat(body: ChatMessage, db: Session = Depends(get_db)):
     products = db.query(models.Product).all()
     product_context = build_product_context(products)
 
-    response = await generate_response(body.message, product_context)
+    history = [{"role": h.role, "content": h.content} for h in (body.history or [])]
+    response = await generate_response(body.message, product_context, history)
     return {"response": response}
 
 

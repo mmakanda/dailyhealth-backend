@@ -72,7 +72,7 @@ async def _call_groq(messages: list[dict]) -> str:
         return resp.json()["choices"][0]["message"]["content"].strip()
 
 
-async def generate_response(user_message: str, product_context: str = "") -> str:
+async def generate_response(user_message: str, product_context: str = "", history: list = []) -> str:
     """
     Main chatbot response with RAG.
     product_context is a formatted string of all products from the DB.
@@ -93,8 +93,11 @@ async def generate_response(user_message: str, product_context: str = "") -> str
             f"Customer question: {user_message}"
         )
 
+    # Build messages with history (keep last 6 exchanges = 12 messages max)
+    recent_history = history[-12:] if len(history) > 12 else history
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *recent_history,
         {"role": "user", "content": user_content},
     ]
 
