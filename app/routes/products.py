@@ -1,9 +1,24 @@
-from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+
 router = APIRouter(prefix="/products", tags=["products"])
+
+class ProductCreate(BaseModel):
+    name: str
+    description: str
+    price: float
+    stock: int
+
+class ProductUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    price: Optional[float] = None
+    stock: Optional[int] = None
 
 @router.get("/")
 def get_products(db: Session = Depends(get_db)):
@@ -26,3 +41,31 @@ def seed_products(db: Session = Depends(get_db)):
     db.add_all(products)
     db.commit()
     return {"message": f"Seeded {len(products)} products"}
+
+@router.post("/")
+def create_product(data: ProductCreate, db: Session = Depends(get_db)):
+    product = models.Product(**data.dict())
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+@router.put("/{product_id}")
+def update_product(product_id: int, data: ProductUpdate, db: Session = Depends(get_db)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    for key, value in data.dict(exclude_unset=True).items():
+        setattr(product, key, value)
+    db.commit()
+    db.refresh(product)
+    return product
+
+@router.delete("/{product_id}")
+def delete_product(product_id: int, db: Session = Depends(get_db)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    db.delete(product)
+    db.commit()
+    return {"message": "Product deleted"}
