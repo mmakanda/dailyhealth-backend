@@ -1,14 +1,17 @@
 import base64
 import json
 import httpx
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from app.config import get_settings
 
 router = APIRouter(prefix="/prescriptions", tags=["Prescriptions"])
 settings = get_settings()
 
 @router.post("/verify")
-async def verify_prescription(file: UploadFile = File(...)):
+async def verify_prescription(
+    file: UploadFile = File(...),
+    rx_items: str = Form(...),
+):
     if not file.content_type.startswith("image/"):
         raise HTTPException(400, "Only image files are accepted.")
 
@@ -19,9 +22,15 @@ async def verify_prescription(file: UploadFile = File(...)):
     b64 = base64.b64encode(contents).decode()
     media_type = file.content_type
 
+    try:
+        items_list = json.loads(rx_items)
+        items_str = "\n".join(f"- {item}" for item in items_list)
+    except Exception:
+        items_str = rx_items
+
     payload = {
         "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-        "max_tokens": 150,
+        "max_tokens": 300,
         "messages": [{
             "role": "user",
             "content": [
@@ -32,14 +41,20 @@ async def verify_prescription(file: UploadFile = File(...)):
                 {
                     "type": "text",
                     "text": (
-                        "You are a pharmacy prescription verification assistant. Examine this image strictly.\n\n"
-                        "A valid prescription must have: doctor or clinic name, patient name, date, "
-                        "at least one medication with dosage, and a signature or stamp.\n\n"
-                        "Respond ONLY with valid JSON, no extra text:\n"
-                        '{"valid": true, "reason": "one sentence explanation"}\n'
-                        "or\n"
-                        '{"valid": false, "reason": "one sentence explanation"}\n\n'
-                        "Reject anything that is not clearly a medical prescription."
+                        "You are a pharmacy prescription verification assistant.\n\n"
+                        "STEP 1 — Is this a valid prescription?\n"
+                        "A valid prescription has: doctor/clinic name, patient name, date, at least one medication with dosage, and a signature or stamp.\n"
+                        "Reject selfies, ID cards, receipts, blank pages, or any non-prescription document.\n\n"
+                        "STEP 2 — Do the following cart items appear on the prescription?\n"
+                        "Be flexible with matching: brand names match generics, partial name matches count, spelling variations are acceptable.\n\n"
+                        f"Cart items to check:\n{items_str}\n\n"
+                        "Respond ONLY with valid JSON, no extra text, no markdown:\n"
+                        '{"valid": true, "reason": "brief explanation", "missing_items": []}\n\n'
+                        "Rules:\n"
+                        "- valid=false if document is not a prescription\n"
+                        "- valid=false if ANY cart item cannot be matched to the prescription (list them in missing_items)\n"
+                        "- valid=true only if it is a real prescription AND all cart items are covered\n"
+                        "- missing_items must be an array (empty if all matched)"
                     )
                 }
             ]
@@ -61,4 +76,15 @@ async def verify_prescription(file: UploadFile = File(...)):
 
     text = resp.json()["choices"][0]["message"]["content"]
     clean = text.replace("```json", "").replace("```", "").strip()
-    return json.loads(clean)
+    
+    try:
+        result = json.loads(clean)
+    except Exception:
+        return {"valid": False, "reason": "Could not parse verification response. Please try again."}
+
+    if result.get("missing_items") and len(result["missing_items"]) > 0:
+        result["valid"] = False
+        missing = ", ".join(result["missing_items"])
+        result["reason"] = f"Your prescription does not cover: {missing}. Please provide a prescription that includes all Rx items in your cart."
+
+    return result
