@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
 from app.config import get_settings
-from app.routes import chat, products, orders, auth
+from app.routes import chat, products, orders, auth, prescriptions
 
 settings = get_settings()
 
@@ -33,6 +33,7 @@ app.include_router(auth.router)
 app.include_router(products.router)
 app.include_router(orders.router)
 app.include_router(chat.router)
+app.include_router(prescriptions.router)
 
 @app.get("/health")
 def health():
