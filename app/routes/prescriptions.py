@@ -1,9 +1,11 @@
 import base64
 import json
 import httpx
+import logging
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/prescriptions", tags=["Prescriptions"])
 settings = get_settings()
 
@@ -44,17 +46,12 @@ async def verify_prescription(
                         "You are a pharmacy prescription verification assistant.\n\n"
                         "STEP 1 — Is this a valid prescription?\n"
                         "A valid prescription has: doctor/clinic name, patient name, date, at least one medication with dosage, and a signature or stamp.\n"
-                        "Reject selfies, ID cards, receipts, blank pages, or any non-prescription document.\n\n"
-                        "STEP 2 — Do the following cart items appear on the prescription?\n"
-                        "Be flexible with matching: brand names match generics, partial name matches count, spelling variations are acceptable.\n\n"
-                        f"Cart items to check:\n{items_str}\n\n"
-                        "Respond ONLY with valid JSON, no extra text, no markdown:\n"
-                        '{"valid": true, "reason": "brief explanation", "missing_items": []}\n\n'
-                        "Rules:\n"
-                        "- valid=false if document is not a prescription\n"
-                        "- valid=false if ANY cart item cannot be matched to the prescription (list them in missing_items)\n"
-                        "- valid=true only if it is a real prescription AND all cart items are covered\n"
-                        "- missing_items must be an array (empty if all matched)"
+                        "Reject selfies, ID cards, receipts, blank pages.\n\n"
+                        "STEP 2 — Do these cart items appear on the prescription?\n"
+                        "Be flexible: brand names match generics, partial matches count.\n\n"
+                        f"Cart items:\n{items_str}\n\n"
+                        "Respond ONLY with valid JSON, no markdown:\n"
+                        '{"valid": true, "reason": "explanation", "missing_items": []}'
                     )
                 }
             ]
@@ -71,20 +68,23 @@ async def verify_prescription(
             json=payload,
         )
 
+    logger.error(f"GROQ STATUS: {resp.status_code}")
+    logger.error(f"GROQ RESPONSE: {resp.text}")
+
     if resp.status_code != 200:
-        raise HTTPException(502, "Verification service unavailable. Please try again.")
+        raise HTTPException(502, f"Groq error {resp.status_code}: {resp.text}")
 
     text = resp.json()["choices"][0]["message"]["content"]
     clean = text.replace("```json", "").replace("```", "").strip()
-    
+
     try:
         result = json.loads(clean)
     except Exception:
-        return {"valid": False, "reason": "Could not parse verification response. Please try again."}
+        return {"valid": False, "reason": f"Could not parse response: {text}"}
 
     if result.get("missing_items") and len(result["missing_items"]) > 0:
         result["valid"] = False
         missing = ", ".join(result["missing_items"])
-        result["reason"] = f"Your prescription does not cover: {missing}. Please provide a prescription that includes all Rx items in your cart."
+        result["reason"] = f"Your prescription does not cover: {missing}."
 
     return result
