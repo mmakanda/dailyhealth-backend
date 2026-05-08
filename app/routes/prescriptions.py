@@ -23,7 +23,9 @@ async def verify_prescription(
         raise HTTPException(400, "File too large. Maximum 5MB.")
 
     b64 = base64.b64encode(contents).decode()
-    media_type = file.content_type or "image/jpeg"
+    media_type = (file.content_type or "image/jpeg").split(";")[0].strip()
+    if media_type not in ["image/jpeg","image/png","image/gif","image/webp"]:
+        media_type = "image/jpeg"
 
     try:
         items_list = json.loads(rx_items or "[]")
