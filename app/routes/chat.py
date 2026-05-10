@@ -1,60 +1,56 @@
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from typing import List, Optional
 from app.database import get_db
 from app import models
 from app.ai import generate_response, extract_order_from_message
+from app.dependencies import get_current_user
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
+limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/chat", tags=["chat"])
-
-
-from typing import List, Optional
 
 class HistoryItem(BaseModel):
     role: str
     content: str
 
 class ChatMessage(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=2000)
     history: Optional[List[HistoryItem]] = []
 
-
 def build_product_context(products: list) -> str:
-    """
-    Builds a rich, structured product list for the AI.
-    The more detail the model has, the better it can answer questions
-    like "do you have cough syrup?" or "what brands of painkillers do you stock?"
-    """
     if not products:
         return ""
-
     lines = []
     for p in products:
         stock_status = "IN STOCK" if p.stock > 0 else "OUT OF STOCK"
-        lines.append(
-            f"- {p.name} | Price: ${p.price:.2f} | {stock_status} | Info: {p.description}"
-        )
+        lines.append(f"- {p.name} | Price: ${p.price:.2f} | {stock_status} | Info: {p.description}")
     return "\n".join(lines)
 
-
 @router.post("/")
-async def chat(body: ChatMessage, db: Session = Depends(get_db)):
-    # Fetch ALL products — the AI needs the full inventory to answer
-    # category questions like "what cough syrups do you have?"
+@limiter.limit("20/minute;100/hour")
+async def chat(
+    request: Request,
+    body: ChatMessage,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     products = db.query(models.Product).all()
     product_context = build_product_context(products)
-
     history = [{"role": h.role, "content": h.content} for h in (body.history or [])]
     response = await generate_response(body.message, product_context, history)
     return {"response": response}
 
-
 @router.post("/extract-order")
-async def extract_order(body: ChatMessage, db: Session = Depends(get_db)):
-    """
-    AI-powered order extraction from natural language.
-    Handles Shona/Ndebele messages for the WhatsApp bot.
-    """
+@limiter.limit("30/minute")
+async def extract_order(
+    request: Request,
+    body: ChatMessage,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     products = db.query(models.Product).all()
     product_list = "\n".join(f"- {p.name}" for p in products)
     result = await extract_order_from_message(body.message, product_list)
