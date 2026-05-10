@@ -5,6 +5,7 @@ from typing import Optional
 from app.database import get_db
 from app import models
 from app.dependencies import get_current_user
+import bleach
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -51,8 +52,15 @@ def create_order(
         user_id=current_user.id,
         product_id=data.product_id,
         quantity=data.quantity,
-        notes=data.notes
+        notes=bleach.clean(data.notes) if data.notes else None
     )
     product.stock -= data.quantity
     db.add(order); db.commit(); db.refresh(order)
     return order
+
+
+# Sanitise notes field on input
+import bleach as _bleach
+
+def _sanitise(text: str | None) -> str | None:
+    return _bleach.clean(text) if text else text

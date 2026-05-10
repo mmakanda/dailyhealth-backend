@@ -1,9 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from app.limiter import limiter
 from app.database import engine, Base
 from app.config import get_settings
 from app.routes import chat, products, orders, auth, prescriptions
@@ -15,8 +16,6 @@ logging.basicConfig(level=logging.INFO)
 
 Base.metadata.create_all(bind=engine)
 
-limiter = Limiter(key_func=get_remote_address)
-
 app = FastAPI(
     title="Daily Health Pharmacy API",
     version="1.0.0",
@@ -27,20 +26,19 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error: {request.url.path} — {exc}\n{traceback.format_exc()}")
     return JSONResponse(status_code=500, content={"detail": "An unexpected error occurred"})
 
-allowed_origins = [
-    "https://dailyhealth-frontend.vercel.app",
-    "http://localhost:3000",
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
+    allow_origins=[
+        "https://dailyhealth-frontend.vercel.app",
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Authorization", "Content-Type"],
@@ -54,7 +52,7 @@ app.include_router(prescriptions.router)
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "Daily Health Pharmacy API"}
+    return {"status": "ok"}
 
 @app.get("/")
 def root():

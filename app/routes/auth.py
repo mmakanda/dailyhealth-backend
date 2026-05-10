@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 from jose import jwt
 from datetime import datetime, timedelta, timezone
 from app.config import get_settings
+from app.limiter import limiter
 from pydantic import BaseModel, Field, field_validator
 import re
 
@@ -15,7 +16,7 @@ settings = get_settings()
 
 class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=8, max_length=64)
 
     @field_validator("password")
     @classmethod
@@ -28,14 +29,15 @@ class RegisterRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=50)
-    password: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=1, max_length=64)
 
 def create_token(data: dict):
     expire = datetime.now(timezone.utc) + timedelta(hours=1)
     return jwt.encode({**data, "exp": expire}, settings.secret_key, algorithm="HS256")
 
 @router.post("/register")
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, payload: RegisterRequest, db: Session = Depends(get_db)):
     if db.query(models.User).filter(models.User.username == payload.username).first():
         raise HTTPException(400, "Username already exists")
     user = models.User(
@@ -46,6 +48,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     return {"message": "User created"}
 
 @router.post("/login")
+@limiter.limit("5/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     dummy = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQyCMRozaVJTOE.zQHBdQYyau"
